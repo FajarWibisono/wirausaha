@@ -1,0 +1,13 @@
+streamlit
+langchain
+langchain-groq
+langchain-community
+python-dotenv
+faiss-cpu
+sentence-transformers
+PyPDF2
+typing-extensions>=4.5.0
+pydantic>=2.0
+numpy
+torch
+transformers
