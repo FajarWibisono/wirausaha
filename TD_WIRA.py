@@ -42,7 +42,7 @@ st.title("📓TEMAN DISKUSI KEWIRAUSAHAAN")
 st.markdown(
     """
     ### Selamat Datang di Asisten Pengetahuan Tentang Kewirausahaan
-    Chat Bot ini akan membantu Anda memahami lebih dalam tentang dunia KEWIRAUSAHAAN dan berbagai hal-hal yang perlu di perhatikan baik pada masa persiapan, pelaksanaan, pengembangan,dan bahkan exit strategy.
+    Chat Bot ini akan membantu Anda memahami lebih dalam tentang dunia KEWIRAUSAHAAN dan berbagai hal-hal yang perlu di perhatikan baik pada masa persiapan, pelaksanaan, pengembangan,dan bahkan exit strategy. **Pastikanlah Anda memiliki koneksi internet yang baik dan stabil.**
     """
 )
 
