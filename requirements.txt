@@ -11,3 +11,4 @@ pydantic>=2.0
 numpy
 torch
 transformers
+pypdf
