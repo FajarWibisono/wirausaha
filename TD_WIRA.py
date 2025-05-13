@@ -42,7 +42,7 @@ st.title("📓TEMAN DISKUSI KEWIRAUSAHAAN")
 st.markdown(
     """
     ### Selamat Datang di Asisten Pengetahuan Tentang Kewirausahaan
-    Chat Bot ini akan membantu Anda memahami lebih dalam tentang dunia KEWIRAUSAHAAN dan berbagai hal-hal yang perlu di perhatikan baik pada masa persiapan, pelaksanaan, pengembangan,dan bahkan exit strategy. **Pastikanlah Anda memiliki koneksi internet yang baik dan stabil.**
+    **Chat Bot ini akan membantu Anda memahami lebih dalam tentang dunia KEWIRAUSAHAAN** dan berbagai hal-hal yang perlu di perhatikan baik pada masa persiapan, pelaksanaan, pengembangan,dan bahkan exit strategy. **Pastikanlah Anda memiliki koneksi internet yang baik dan stabil.**
     """
 )
 
@@ -182,7 +182,7 @@ st.markdown(
     """
     ---
     **Disclaimer:**
-    - Sistem ini menggunakan AI-LLM dan dapat menghasilkan jawaban yang tidak selalu akurat.
+    - Sistem ini menggunakan **AI-LLM dan dapat menghasilkan jawaban yang tidak selalu akurat.**
     - Ketik: LANJUTKAN JAWABANMU untuk kemungkinan mendapatkan jawaban yang lebih baik dan utuh.
     - Mohon verifikasi informasi penting dengan sumber terpercaya.
     """
