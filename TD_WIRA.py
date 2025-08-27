@@ -1,4 +1,4 @@
-# TEDI-WIRA
+# TD_WIRA.py
 import streamlit as st
 import os
 from langchain_groq import ChatGroq
@@ -198,7 +198,7 @@ def initialize_rag():
             max_tokens=2048
         )
 
-        # 7. Membuat Memory - Menggunakan implementasi sederhana
+        # 7. Membuat Memory - Menggunakan implementasi sederhana (menghindari deprecated memory)
         class SimpleMemory:
             def __init__(self, k=3):
                 self.k = k
