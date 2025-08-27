@@ -6,10 +6,9 @@ from langchain_groq import ChatGroq
 # Import yang sudah diperbaiki sesuai versi LangChain terbaru
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings  # Import yang benar
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
 import tempfile
 
@@ -199,40 +198,39 @@ def initialize_rag():
             max_tokens=2048
         )
 
-        # 7. Membuat Memory - Menggunakan alternatif yang direkomendasikan
-        from langchain_core.messages import HumanMessage, AIMessage
-        from typing import List, Tuple
-        
-        # Custom memory implementation yang lebih modern
-        class SimpleConversationBufferMemory:
+        # 7. Membuat Memory - Menggunakan implementasi sederhana
+        class SimpleMemory:
             def __init__(self, k=3):
                 self.k = k
-                self.chat_history: List[Tuple[str, str]] = []
+                self.history = []
             
             def save_context(self, inputs, outputs):
                 question = inputs.get("question", "")
                 answer = outputs.get("answer", "")
-                self.chat_history.append((question, answer))
-                if len(self.chat_history) > self.k:
-                    self.chat_history = self.chat_history[-self.k:]
+                self.history.append(("Human", question))
+                self.history.append(("AI", answer))
+                # Keep only last k pairs
+                if len(self.history) > self.k * 2:
+                    self.history = self.history[-(self.k * 2):]
             
             def load_memory_variables(self, inputs):
-                return {"chat_history": self.chat_history}
-        
-        # Gunakan memory yang lebih modern
-        memory = SimpleConversationBufferMemory(k=3)
+                return {"chat_history": self.history}
+
+        memory = SimpleMemory(k=3)
 
         # 8. Membuat Chain
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
-            memory=memory,
             return_source_documents=True,
             combine_docs_chain_kwargs={
                 'prompt': INDO_PROMPT_TEMPLATE,
                 'output_key': 'answer'
             }
         )
+        
+        # Attach memory to chain manually
+        chain.memory = memory
 
         return chain
 
@@ -290,12 +288,14 @@ if st.session_state.chain:
             with st.spinner("Mencari jawaban..."):
                 try:
                     # Panggil chain
-                    result = st.session_state.chain({"question": prompt})
+                    result = st.session_state.chain({"question": prompt, "chat_history": st.session_state.chain.memory.history})
                     # Ambil jawaban
                     answer = result.get('answer', '')
                     st.write(answer)
                     # Tambahkan ke riwayat
                     st.session_state.chat_history.append({"role": "assistant", "content": answer})
+                    # Simpan ke memory
+                    st.session_state.chain.memory.save_context({"question": prompt}, {"answer": answer})
                 except Exception as e:
                     error_msg = f"Error generating response: {str(e)}"
                     st.error(error_msg)
