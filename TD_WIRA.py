@@ -3,10 +3,10 @@ import streamlit as st
 import os
 from langchain_groq import ChatGroq
 
-# Import yang sudah diperbaiki sesuai versi LangChain terbaru
+# Import yang BENAR sesuai dokumentasi LangChain v0.2+
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings  # Import yang benar
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
