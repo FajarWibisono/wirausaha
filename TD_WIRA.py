@@ -116,7 +116,7 @@ def analyze_business_proposal(pdf_file):
         llm = ChatGroq(
             temperature=0.3,
             model_name="gemma2-9b-it",
-            max_tokens=2048
+            max_tokens=4096
         )
 
         # Dapatkan jawaban
@@ -296,3 +296,4 @@ st.markdown(
     - Mohon verifikasi informasi penting dengan sumber terpercaya.
     """
 )
+
