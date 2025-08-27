@@ -3,10 +3,20 @@ import streamlit as st
 import os
 from langchain_groq import ChatGroq
 
-# Import yang BENAR sesuai dokumentasi LangChain v0.2+
+# Import dengan fallback untuk menghindari ModuleNotFoundError
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+    EMBEDDINGS_AVAILABLE = True
+except ImportError:
+    try:
+        from langchain_community.embeddings import HuggingFaceEmbeddings
+        EMBEDDINGS_AVAILABLE = True
+    except ImportError:
+        EMBEDDINGS_AVAILABLE = False
+        st.error("❌ Tidak dapat mengimpor HuggingFaceEmbeddings. Pastikan 'langchain-huggingface' terinstal.")
+
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings  # Import yang benar
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
@@ -34,6 +44,7 @@ st.markdown(
         .bot-message { background-color: #e8f0fe; }
         .analysis-box { background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 1rem; margin: 1rem 0; }
         .startup-info { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; }
+        .error-box { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; color: #721c24; }
     </style>
     """,
     unsafe_allow_html=True
@@ -57,6 +68,14 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'proposal_analysis' not in st.session_state:
     st.session_state.proposal_analysis = None
+
+# Cek ketersediaan embeddings
+if not EMBEDDINGS_AVAILABLE:
+    st.markdown(
+        '<div class="error-box">⚠️ <strong>Error Kritis:</strong> Package <code>langchain-huggingface</code> tidak ditemukan. Aplikasi tidak dapat berjalan. Silakan pastikan semua dependencies terinstal dengan benar.</div>',
+        unsafe_allow_html=True
+    )
+    st.stop()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. PROMPT UNTUK MENJAMIN BAHASA INDONESIA
@@ -239,14 +258,14 @@ if st.session_state.proposal_analysis:
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. INISIALISASI SISTEM
 # ─────────────────────────────────────────────────────────────────────────────
-if st.session_state.chain is None:
+if st.session_state.chain is None and EMBEDDINGS_AVAILABLE:
     with st.spinner("Memuat sistem..."):
         st.session_state.chain = initialize_rag()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. ANTARMUKA CHAT DENGAN PENGELOLAAN RIWAYAT MANUAL
 # ─────────────────────────────────────────────────────────────────────────────
-if st.session_state.chain:
+if st.session_state.chain and EMBEDDINGS_AVAILABLE:
     # 9.1 Tampilkan riwayat chat
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
