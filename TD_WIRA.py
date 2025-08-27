@@ -1,16 +1,15 @@
-﻿import streamlit as st
+# app.py
+import streamlit as st
 import os
-
-# pip install streamlit langchain huggingface_hub sentence-transformers faiss-cpu
-
 from langchain_groq import ChatGroq
 from langchain.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory, ConversationBufferWindowMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
+import tempfile
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. KONFIGURASI API & HALAMAN
@@ -32,6 +31,7 @@ st.markdown(
         .chat-message { padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; }
         .user-message { background-color: #f0f2f6; }
         .bot-message { background-color: #e8f0fe; }
+        .analysis-box { background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 1rem; margin: 1rem 0; }
     </style>
     """,
     unsafe_allow_html=True
@@ -53,11 +53,12 @@ if 'chain' not in st.session_state:
     st.session_state.chain = None
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
+if 'proposal_analysis' not in st.session_state:
+    st.session_state.proposal_analysis = None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. PROMPT UNTUK MENJAMIN BAHASA INDONESIA
 # ─────────────────────────────────────────────────────────────────────────────
-# Prompt ini akan memaksa jawaban selalu dalam Bahasa Indonesia.
 PROMPT_INDONESIA = """\
 Anda adalah seorang Ahli ENTREPRENEURSHIP yang KREATIF dan berpengalaman lebih dari 25 tahun . Gunakan informasi konteks berikut untuk menjawab berbagai pertanyaan pengguna dalam bahasa Indonesia yang baik dan terstruktur.
 Selalu berikan jawaban terbaik yang dapat kamu berikan dengan tone memotivasi dengan gaya santai dan informal tapi tetap santun.
@@ -75,56 +76,114 @@ INDO_PROMPT_TEMPLATE = PromptTemplate(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. FUNGSI INISIALISASI RAG
+# 4. FUNGSI UNTUK REVIEW PROPOSAL BISNIS
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_resource
+def analyze_business_proposal(pdf_file):
+    """
+    Menganalisis proposal bisnis dari file PDF dan memberikan ringkasan, keuntungan,
+    risiko, serta pertanyaan lanjutan untuk investor.
+    """
+    try:
+        # Simpan file sementara
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+            tmp_file.write(pdf_file.getvalue())
+            tmp_file_path = tmp_file.name
+
+        # Load PDF
+        loader = PyPDFLoader(tmp_file_path)
+        documents = loader.load()
+
+        # Gabungkan semua teks
+        full_text = "\n".join([doc.page_content for doc in documents])
+
+        # Prompt untuk analisis proposal
+        analysis_prompt = f"""
+        Anda adalah seorang ahli bisnis dan investor profesional. Analisis proposal bisnis berikut dan berikan:
+
+        1. **Ringkasan Proposal (5-9 kalimat)**: Berikan gambaran komprehensif tentang ide bisnis, model bisnis, target pasar, dan rencana implementasi.
+        2. **Potensi Keuntungan**: Sebutkan hal-hal yang membuat proposal ini menarik atau potensial menguntungkan.
+        3. **Risiko atau Hal yang Perlu Diwaspadai**: Sebutkan risiko utama atau kelemahan dalam proposal ini.
+        4. **Pertanyaan Investor (3-5 pertanyaan)**: Buat daftar pertanyaan penting yang harus diajukan oleh investor kepada pengusul bisnis.
+
+        Proposal Bisnis:
+        {full_text}
+
+        Jawaban:
+        """
+
+        # Inisialisasi LLM
+        llm = ChatGroq(
+            temperature=0.3,
+            model_name="gemma2-9b-it",
+            max_tokens=2048
+        )
+
+        # Dapatkan jawaban
+        response = llm.invoke(analysis_prompt)
+        
+        # Hapus file sementara
+        os.unlink(tmp_file_path)
+        
+        return response.content
+
+    except Exception as e:
+        # Hapus file sementara jika ada error
+        try:
+            os.unlink(tmp_file_path)
+        except:
+            pass
+        return f"Terjadi kesalahan saat menganalisis proposal: {str(e)}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. FUNGSI INISIALISASI RAG
+# ─────────────────────────────────────────────────────────────────────────────
+@st.cache_resource(show_spinner=False)
 def initialize_rag():
     """
     Memuat dokumen PDF dari folder 'documents', memecah menjadi chunk,
     membuat FAISS vector store, dan membentuk ConversationalRetrievalChain.
     """
     try:
-        # 4.1 Load Dokumen PDF
+        # 5.1 Load Dokumen PDF
         loader = DirectoryLoader("documents", glob="**/*.pdf", loader_cls=PyPDFLoader)
         documents = loader.load()
 
-        # 4.2 Split Dokumen
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1800, chunk_overlap=234)
+        # 5.2 Split Dokumen
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
         texts = text_splitter.split_documents(documents)
 
-        # 4.3 Embedding Berbahasa Indonesia
-        # Ganti sesuai preferensi, misal "indobenchmark/indobert-base-p1", dsb.
+        # 5.3 Embedding Berbahasa Indonesia
         embeddings = HuggingFaceEmbeddings(
-            model_name="LazarusNLP/all-indo-e5-small-v4",
+            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
             model_kwargs={'device': 'cpu'}  
         )
 
-        # 4.4 Membuat Vector Store FAISS
+        # 5.4 Membuat Vector Store FAISS
         vectorstore = FAISS.from_documents(texts, embeddings)
 
-        # 4.5 Menginisialisasi LLM (ChatGroq)
+        # 5.5 Menginisialisasi LLM (ChatGroq)
         llm = ChatGroq(
             temperature=0.45,
             model_name="gemma2-9b-it",
             max_tokens=2048
         )
 
-        # 4.6 Membuat Memory untuk menyimpan riwayat percakapan
+        # 5.6 Membuat Memory untuk menyimpan riwayat percakapan
         memory = ConversationBufferWindowMemory(
-            k=2,  # hanya menyimpan 2 interaksi terakhir
+            k=3,  # menyimpan 3 interaksi terakhir
             memory_key='chat_history',
             return_messages=True,
             output_key='answer'
         )
 
-        # 4.7 Membuat ConversationalRetrievalChain
+        # 5.7 Membuat ConversationalRetrievalChain
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
             memory=memory,
             return_source_documents=True,
             combine_docs_chain_kwargs={
-                'prompt': INDO_PROMPT_TEMPLATE,  # Gunakan template Indonesia
+                'prompt': INDO_PROMPT_TEMPLATE,
                 'output_key': 'answer'
             }
         )
@@ -136,22 +195,43 @@ def initialize_rag():
         return None
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. INISIALISASI SISTEM
+# 6. SIDEBAR UNTUK UPLOAD DAN ANALISIS PROPOSAL
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.header("📄 Review Proposal Bisnis")
+    st.markdown("Upload file PDF proposal bisnis untuk dianalisis.")
+    uploaded_file = st.file_uploader("📁 Pilih file PDF", type="pdf")
+
+    if uploaded_file:
+        with st.spinner("Menganalisis proposal..."):
+            summary = analyze_business_proposal(uploaded_file)
+            st.session_state.proposal_analysis = summary
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. TAMPILKAN HASIL ANALISIS PROPOSAL (JIKA ADA)
+# ─────────────────────────────────────────────────────────────────────────────
+if st.session_state.proposal_analysis:
+    st.subheader("🔍 Hasil Analisis Proposal Bisnis")
+    st.markdown(f'<div class="analysis-box">{st.session_state.proposal_analysis}</div>', unsafe_allow_html=True)
+    st.markdown("---")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. INISIALISASI SISTEM
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.chain is None:
     with st.spinner("Memuat sistem..."):
         st.session_state.chain = initialize_rag()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. ANTARMUKA CHAT
+# 9. ANTARMUKA CHAT
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.chain:
-    # 6.1 Tampilkan riwayat chat
+    # 9.1 Tampilkan riwayat chat
     for message in st.session_state.chat_history:
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-    # 6.2 Chat Input
+    # 9.2 Chat Input
     prompt = st.chat_input("✍️tuliskan pertanyaan Anda tentang KEWIRAUSAHAAN disini")
     if prompt:
         # Tambahkan pertanyaan user ke riwayat chat
@@ -159,7 +239,7 @@ if st.session_state.chain:
         with st.chat_message("user"):
             st.write(prompt)
 
-        # 6.3 Generate Response
+        # 9.3 Generate Response
         with st.chat_message("assistant"):
             with st.spinner("Mencari jawaban..."):
                 try:
@@ -176,7 +256,7 @@ if st.session_state.chain:
                     st.session_state.chat_history.append({"role": "assistant", "content": error_msg})
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. FOOTER & DISCLAIMER
+# 10. FOOTER & DISCLAIMER
 # ─────────────────────────────────────────────────────────────────────────────
 st.markdown(
     """
