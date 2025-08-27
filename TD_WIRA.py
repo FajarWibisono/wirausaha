@@ -2,10 +2,12 @@
 import streamlit as st
 import os
 from langchain_groq import ChatGroq
-from langchain.document_loaders import PyPDFLoader, DirectoryLoader
+
+# Import yang sudah diperbaiki sesuai versi LangChain terbaru
+from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
@@ -116,7 +118,7 @@ def analyze_business_proposal(pdf_file):
         llm = ChatGroq(
             temperature=0.3,
             model_name="gemma2-9b-it",
-            max_tokens=4096
+            max_tokens=2048
         )
 
         # Dapatkan jawaban
@@ -197,13 +199,28 @@ def initialize_rag():
             max_tokens=2048
         )
 
-        # 7. Membuat Memory
-        memory = ConversationBufferWindowMemory(
-            k=3,
-            memory_key='chat_history',
-            return_messages=True,
-            output_key='answer'
-        )
+        # 7. Membuat Memory - Menggunakan alternatif yang direkomendasikan
+        from langchain_core.messages import HumanMessage, AIMessage
+        from typing import List, Tuple
+        
+        # Custom memory implementation yang lebih modern
+        class SimpleConversationBufferMemory:
+            def __init__(self, k=3):
+                self.k = k
+                self.chat_history: List[Tuple[str, str]] = []
+            
+            def save_context(self, inputs, outputs):
+                question = inputs.get("question", "")
+                answer = outputs.get("answer", "")
+                self.chat_history.append((question, answer))
+                if len(self.chat_history) > self.k:
+                    self.chat_history = self.chat_history[-self.k:]
+            
+            def load_memory_variables(self, inputs):
+                return {"chat_history": self.chat_history}
+        
+        # Gunakan memory yang lebih modern
+        memory = SimpleConversationBufferMemory(k=3)
 
         # 8. Membuat Chain
         chain = ConversationalRetrievalChain.from_llm(
@@ -296,4 +313,3 @@ st.markdown(
     - Mohon verifikasi informasi penting dengan sumber terpercaya.
     """
 )
-
