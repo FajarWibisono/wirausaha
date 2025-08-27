@@ -6,7 +6,7 @@ from langchain_groq import ChatGroq
 # Import yang sudah diperbaiki sesuai versi LangChain terbaru
 from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings  # Import yang benar
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
@@ -198,27 +198,7 @@ def initialize_rag():
             max_tokens=2048
         )
 
-        # 7. Membuat Memory - Menggunakan implementasi sederhana (menghindari deprecated memory)
-        class SimpleMemory:
-            def __init__(self, k=3):
-                self.k = k
-                self.history = []
-            
-            def save_context(self, inputs, outputs):
-                question = inputs.get("question", "")
-                answer = outputs.get("answer", "")
-                self.history.append(("Human", question))
-                self.history.append(("AI", answer))
-                # Keep only last k pairs
-                if len(self.history) > self.k * 2:
-                    self.history = self.history[-(self.k * 2):]
-            
-            def load_memory_variables(self, inputs):
-                return {"chat_history": self.history}
-
-        memory = SimpleMemory(k=3)
-
-        # 8. Membuat Chain
+        # 7. Membuat Chain (tanpa memory deprecated)
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
@@ -228,9 +208,6 @@ def initialize_rag():
                 'output_key': 'answer'
             }
         )
-        
-        # Attach memory to chain manually
-        chain.memory = memory
 
         return chain
 
@@ -267,7 +244,7 @@ if st.session_state.chain is None:
         st.session_state.chain = initialize_rag()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 9. ANTARMUKA CHAT
+# 9. ANTARMUKA CHAT DENGAN PENGELOLAAN RIWAYAT MANUAL
 # ─────────────────────────────────────────────────────────────────────────────
 if st.session_state.chain:
     # 9.1 Tampilkan riwayat chat
@@ -287,15 +264,27 @@ if st.session_state.chain:
         with st.chat_message("assistant"):
             with st.spinner("Mencari jawaban..."):
                 try:
-                    # Panggil chain
-                    result = st.session_state.chain({"question": prompt, "chat_history": st.session_state.chain.memory.history})
+                    # Format riwayat chat untuk chain
+                    chat_history_formatted = []
+                    for msg in st.session_state.chat_history[:-1]:  # Exclude current question
+                        if msg["role"] == "user":
+                            chat_history_formatted.append(("Human", msg["content"]))
+                        else:
+                            chat_history_formatted.append(("AI", msg["content"]))
+                    
+                    # Panggil chain dengan riwayat chat
+                    result = st.session_state.chain({
+                        "question": prompt,
+                        "chat_history": chat_history_formatted
+                    })
+                    
                     # Ambil jawaban
                     answer = result.get('answer', '')
                     st.write(answer)
+                    
                     # Tambahkan ke riwayat
                     st.session_state.chat_history.append({"role": "assistant", "content": answer})
-                    # Simpan ke memory
-                    st.session_state.chain.memory.save_context({"question": prompt}, {"answer": answer})
+                    
                 except Exception as e:
                     error_msg = f"Error generating response: {str(e)}"
                     st.error(error_msg)
