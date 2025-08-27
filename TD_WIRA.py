@@ -1,4 +1,4 @@
-# app.py
+# TEDI-WIRA
 import streamlit as st
 import os
 from langchain_groq import ChatGroq
@@ -32,6 +32,7 @@ st.markdown(
         .user-message { background-color: #f0f2f6; }
         .bot-message { background-color: #e8f0fe; }
         .analysis-box { background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 1rem; margin: 1rem 0; }
+        .startup-info { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 1rem; border-radius: 0.5rem; margin: 1rem 0; }
     </style>
     """,
     unsafe_allow_html=True
@@ -135,48 +136,76 @@ def analyze_business_proposal(pdf_file):
         return f"Terjadi kesalahan saat menganalisis proposal: {str(e)}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. FUNGSI INISIALISASI RAG
+# 5. FUNGSI INISIALISASI RAG DENGAN OPTIMASI
 # ─────────────────────────────────────────────────────────────────────────────
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(ttl=3600, show_spinner=False)  # Cache selama 1 jam
 def initialize_rag():
     """
     Memuat dokumen PDF dari folder 'documents', memecah menjadi chunk,
     membuat FAISS vector store, dan membentuk ConversationalRetrievalChain.
+    Menggunakan persistence untuk mempercepat startup.
     """
     try:
-        # 5.1 Load Dokumen PDF
-        loader = DirectoryLoader("documents", glob="**/*.pdf", loader_cls=PyPDFLoader)
-        documents = loader.load()
+        # Path untuk menyimpan vector store
+        vectorstore_path = "faiss_index"
+        
+        # Cek apakah vector store sudah ada
+        if os.path.exists(vectorstore_path):
+            # Load vector store yang sudah ada
+            embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                model_kwargs={'device': 'cpu'}  
+            )
+            vectorstore = FAISS.load_local(vectorstore_path, embeddings, allow_dangerous_deserialization=True)
+            st.info("✅ Vector store dimuat dari cache disk")
+        else:
+            # Tampilkan info startup
+            startup_placeholder = st.empty()
+            startup_placeholder.markdown(
+                '<div class="startup-info">🚀 Pertama kali startup: Membuat vector store dari dokumen... Ini mungkin memakan waktu beberapa menit.</div>', 
+                unsafe_allow_html=True
+            )
+            
+            # 1. Load Dokumen PDF
+            loader = DirectoryLoader("documents", glob="**/*.pdf", loader_cls=PyPDFLoader)
+            documents = loader.load()
 
-        # 5.2 Split Dokumen
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1500, chunk_overlap=200)
-        texts = text_splitter.split_documents(documents)
+            # 2. Split Dokumen (dioptimasi)
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=150)
+            texts = text_splitter.split_documents(documents)
 
-        # 5.3 Embedding Berbahasa Indonesia
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-            model_kwargs={'device': 'cpu'}  
-        )
+            # 3. Embedding (model yang lebih cepat)
+            embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                model_kwargs={'device': 'cpu'}  
+            )
 
-        # 5.4 Membuat Vector Store FAISS
-        vectorstore = FAISS.from_documents(texts, embeddings)
+            # 4. Membuat Vector Store FAISS
+            vectorstore = FAISS.from_documents(texts, embeddings)
+            
+            # 5. Simpan vector store ke disk
+            vectorstore.save_local(vectorstore_path)
+            
+            # Hapus info startup
+            startup_placeholder.empty()
+            st.success("✅ Vector store berhasil dibuat dan disimpan!")
 
-        # 5.5 Menginisialisasi LLM (ChatGroq)
+        # 6. Menginisialisasi LLM (ChatGroq)
         llm = ChatGroq(
             temperature=0.45,
             model_name="gemma2-9b-it",
             max_tokens=2048
         )
 
-        # 5.6 Membuat Memory untuk menyimpan riwayat percakapan
+        # 7. Membuat Memory
         memory = ConversationBufferWindowMemory(
-            k=3,  # menyimpan 3 interaksi terakhir
+            k=3,
             memory_key='chat_history',
             return_messages=True,
             output_key='answer'
         )
 
-        # 5.7 Membuat ConversationalRetrievalChain
+        # 8. Membuat Chain
         chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever(search_kwargs={'k': 3}),
