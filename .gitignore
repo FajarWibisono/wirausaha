@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*.log
+
+# Vector index dibuat saat runtime (jangan di-commit)
+faiss_index/
+
+# Kredensial lokal
+.streamlit/secrets.toml
