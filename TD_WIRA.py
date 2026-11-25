@@ -569,14 +569,6 @@ with st.sidebar:
             "pertanyaan lanjutan. Matikan untuk menghemat token."
         ),
     )
-    if st.session_state.proposal_analysis and st.session_state.include_proposal_context:
-        context_chars = min(
-            len(st.session_state.proposal_analysis.strip()), MAX_PROPOSAL_CONTEXT_CHARS
-        )
-        st.caption(
-            f"Konteks aktif: ±{context_chars:,} karakter analisis dikirim "
-            "bersama setiap pertanyaan."
-        )
 
     col_refresh, col_reset = st.columns(2)
     with col_refresh:
@@ -687,7 +679,7 @@ if st.session_state.chain_error:
 # ─────────────────────────────────────────────────────────────────────────────
 # 10. ANTARMUKA CHAT
 # ─────────────────────────────────────────────────────────────────────────────
-chat_left, chat_mid, chat_right = st.columns([4, 1, 1])
+chat_left, chat_right = st.columns([5, 1])
 with chat_left:
     st.subheader("💬 Diskusi Interaktif dengan **TEDIWIRA**")
     st.markdown(
@@ -698,11 +690,6 @@ with chat_left:
             "🧠 Konteks aktif: jawaban mentor mempertimbangkan hasil analisis proposal "
             "yang Anda lampirkan."
         )
-with chat_mid:
-    st.write("")
-    if st.button("🔄 Refresh tampilan", use_container_width=True):
-        st.toast("Tampilan obrolan & lampiran diperbarui ✅")
-        st.rerun()
 with chat_right:
     st.write("")
     st.download_button(
