@@ -730,12 +730,16 @@ with st.sidebar:
 
     if st.button(
         "🧹 Mulai percakapan baru",
-        help="Hapus riwayat obrolan (lampiran dan kuota pertanyaan tetap).",
+        help=(
+            "Hapus riwayat obrolan sekaligus lampiran & hasil analisis proposal "
+            "(kuota pertanyaan tetap)."
+        ),
         use_container_width=True,
     ):
+        reset_proposal_state()
         st.session_state.chat_history = []
         st.session_state.last_failed_prompt = None
-        st.toast("Riwayat obrolan dibersihkan")
+        st.toast("Percakapan, lampiran, dan hasil analisis dibersihkan")
         st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
