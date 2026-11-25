@@ -58,6 +58,8 @@ MAX_HISTORY_MESSAGES = 12
 MAX_HISTORY_CHARS = 12_000
 MAX_PROPOSAL_CONTEXT_CHARS = int(os.getenv("MAX_PROPOSAL_CONTEXT_CHARS", "4000"))
 
+MAX_QUESTIONS = 7  # batas pertanyaan per sesi browser (pengaman kuota API)
+
 PROMPT_VERSION = "v2"  # ubah bila prompt analisis diubah (cache buster)
 
 try:
@@ -118,6 +120,7 @@ DEFAULT_STATE = {
     "proposal_version": 0,
     "include_proposal_context": True,
     "last_failed_prompt": None,
+    "questions_asked": 0,
 }
 for _key, _value in DEFAULT_STATE.items():
     if _key not in st.session_state:
@@ -138,6 +141,12 @@ PROMPT_INDONESIA = """\
 Anda adalah seorang Ahli ENTREPRENEURSHIP yang KREATIF dan berpengalaman lebih dari 25 tahun. Gunakan informasi konteks berikut untuk menjawab berbagai pertanyaan pengguna dalam bahasa Indonesia yang baik dan terstruktur.
 Selalu berikan jawaban terbaik yang dapat kamu berikan dengan tone memotivasi dengan gaya santai dan informal tapi tetap santun.
 Jika pengguna melampirkan proposal bisnis, gunakan ringkasan analisis proposal di bawah sebagai acuan tambahan saat menjawab pertanyaan lanjutan tentang proposal tersebut.
+
+ATURAN SUMBER:
+- Jawablah HANYA berdasarkan konteks dokumen referensi dan konteks analisis proposal yang diberikan.
+- Jika informasi yang ditanyakan tidak ada di konteks, katakan terus terang bahwa informasinya tidak ditemukan pada dokumen.
+- Saran umum di luar dokumen boleh diberikan, tetapi beri label jelas bahwa itu di luar dokumen.
+- Jangan mengarang fakta, angka, kutipan, atau nama sumber.
 
 Konteks dokumen referensi:
 {context}
@@ -721,7 +730,7 @@ with st.sidebar:
 
     if st.button(
         "🧹 Mulai percakapan baru",
-        help="Hapus riwayat obrolan (lampiran tetap).",
+        help="Hapus riwayat obrolan (lampiran dan kuota pertanyaan tetap).",
         use_container_width=True,
     ):
         st.session_state.chat_history = []
@@ -811,8 +820,23 @@ if st.session_state.last_failed_prompt and chain_ready:
 
 # 10.3 Chat input
 if chain_ready:
-    prompt = st.chat_input("✍️tuliskan pertanyaan Anda tentang KEWIRAUSAHAAN disini")
-    if prompt:
+    questions_left = MAX_QUESTIONS - st.session_state.questions_asked
+    if questions_left <= 0:
+        st.warning(
+            f"Batas {MAX_QUESTIONS} pertanyaan per sesi sudah tercapai. "
+            "Unduh transkrip dulu bila perlu, lalu muat ulang halaman untuk memulai sesi baru."
+        )
+    elif questions_left <= 3:
+        st.caption(
+            f"ℹ️ Sisa {questions_left} dari {MAX_QUESTIONS} pertanyaan untuk sesi ini."
+        )
+
+    prompt = st.chat_input(
+        "✍️tuliskan pertanyaan Anda tentang KEWIRAUSAHAAN disini",
+        disabled=questions_left <= 0,
+    )
+    if prompt and questions_left > 0:
+        st.session_state.questions_asked += 1
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         st.session_state.last_failed_prompt = None
         with st.chat_message("user"):
@@ -829,6 +853,9 @@ if chain_ready:
                 except Exception as exc:
                     st.session_state.last_failed_prompt = prompt
                     st.error(f"Maaf, terjadi kesalahan: {exc}")
+
+        if st.session_state.questions_asked >= MAX_QUESTIONS:
+            st.rerun()
 
 # 10.4 Unduh transkrip di akhir percakapan agar isinya selalu terbaru
 if transcript_available():

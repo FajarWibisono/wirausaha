@@ -1,17 +1,24 @@
-streamlit
-langchain
-langchain-groq
-langchain-community
-python-dotenv
+# UI & RAG chain (dipin agar build reproducible)
+streamlit==1.39.0
+langchain==0.3.27
+langchain-core==0.3.86
+langchain-community==0.3.27
+langchain-groq==0.3.2
+langchain-text-splitters==0.3.11
+langchain-huggingface==0.1.0
+markdown==3.7
+
+# Vector store & embedding (library besar, dibiarkan fleksibel mengikuti runtime)
 faiss-cpu
 sentence-transformers
-PyPDF2
-typing-extensions>=4.5.0
-pydantic>=2.0
-numpy
-torch
 transformers
+torch
+
+# Utilitas
 pypdf
+PyPDF2
+python-dotenv
+numpy
+pydantic>=2.0
+typing-extensions>=4.5.0
 cryptography>=3.1
-langchain-huggingface==0.1.0
-markdown
