@@ -560,14 +560,6 @@ with st.sidebar:
             """,
             unsafe_allow_html=True,
         )
-        st.download_button(
-            "⬇️ Unduh file proposal",
-            data=proposal["bytes"],
-            file_name=proposal["name"],
-            mime="application/pdf",
-            use_container_width=True,
-        )
-
     st.checkbox(
         "🧠 Sertakan analisis proposal di konteks chat",
         key="include_proposal_context",
@@ -645,9 +637,6 @@ with st.sidebar:
         st.session_state.last_failed_prompt = None
         st.toast("Riwayat obrolan dibersihkan")
         st.rerun()
-
-    st.caption(f"Model chat: `{MODEL_CHAT}`")
-    st.caption(f"Model analisis: `{MODEL_PROPOSAL}`")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. HASIL ANALISIS PROPOSAL
