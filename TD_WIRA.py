@@ -340,55 +340,177 @@ def transcript_available() -> bool:
     return bool(st.session_state.chat_history or st.session_state.proposal_analysis)
 
 
-def build_transcript_markdown() -> str:
+TRANSCRIPT_CSS = """
+:root{
+  --ink:#0f172a; --muted:#64748b; --line:#e2e8f0;
+  --brand:#2563eb; --brand-2:#7c3aed; --bg:#eef2f7;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  line-height:1.7;font-size:16px}
+.page{max-width:880px;margin:0 auto;padding:32px 20px 56px}
+.hero{background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff;
+  padding:30px 32px;border-radius:20px;box-shadow:0 16px 40px rgba(37,99,235,.28)}
+.hero .top{display:flex;justify-content:space-between;gap:12px;align-items:center;
+  font-size:13px;letter-spacing:.02em;opacity:.9;flex-wrap:wrap}
+.hero h1{margin:14px 0 6px;font-size:28px;line-height:1.25;font-weight:800}
+.hero p{margin:0;opacity:.92;font-size:15px}
+.chips{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0 26px}
+.chip{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.chip span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.chip strong{display:block;margin-top:2px;font-size:14px;word-break:break-word}
+.card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px 26px;margin:0 0 26px}
+.card>h2{margin:0 0 14px;font-size:18px}
+.chat>h2{font-size:18px;margin:0 0 16px}
+.msg{margin:0 0 18px;display:flex;flex-direction:column;max-width:92%}
+.msg.user{margin-left:auto;align-items:flex-end}
+.msg.mentor{margin-right:auto;align-items:flex-start}
+.who{font-size:12px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;
+  color:var(--muted);margin:0 6px 6px}
+.bubble{padding:16px 20px;border-radius:16px;width:100%}
+.msg.user .bubble{background:#dbeafe;border:1px solid #bfdbfe;border-bottom-right-radius:4px}
+.msg.mentor .bubble{background:#fff;border:1px solid var(--line);
+  border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(15,23,42,.04)}
+.md>*:first-child{margin-top:0}
+.md>*:last-child{margin-bottom:0}
+.md h1,.md h2,.md h3,.md h4{line-height:1.35;margin:18px 0 8px}
+.md h1{font-size:20px}
+.md h2{font-size:18px}
+.md h3{font-size:16px}
+.md p{margin:9px 0}
+.md ul,.md ol{margin:9px 0;padding-left:22px}
+.md li{margin:4px 0}
+.md strong{font-weight:700}
+.md a{color:var(--brand);word-break:break-word}
+.md code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;
+  padding:1px 5px;font-size:.9em}
+.md pre{background:#0f172a;color:#e2e8f0;border-radius:12px;padding:14px 16px;overflow:auto}
+.md pre code{background:none;border:0;color:inherit;padding:0}
+.md blockquote{margin:10px 0;padding:8px 14px;border-left:3px solid var(--brand);
+  background:#f8fafc;color:#334155}
+.md table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+.md th,.md td{border:1px solid var(--line);padding:8px 10px;text-align:left}
+.md th{background:#f8fafc}
+.sources{margin:8px 6px 0;font-size:13px;color:#334155}
+.sources summary{cursor:pointer;font-weight:600;color:var(--brand)}
+.sources ul{margin:8px 0 0;padding-left:20px}
+.sources li{margin:4px 0}
+.empty{color:var(--muted);font-style:italic}
+footer{margin-top:8px;padding-top:18px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:12.5px}
+footer strong{color:#334155}
+@media print{
+  body{background:#fff}
+  .page{max-width:none;padding:0}
+  .hero{border-radius:0;box-shadow:none;padding:22px 24px}
+  .card,.bubble{box-shadow:none}
+  .msg{max-width:100%}
+  footer{page-break-inside:avoid}
+}
+@page{margin:14mm}
+"""
+
+
+def _md_to_html(text: str) -> str:
+    """Konversi markdown ke HTML; '<' di-escape agar HTML mentah tidak ikut tersisip."""
+    escaped = (text or "").strip().replace("<", "&lt;")
+    if not escaped:
+        return ""
+    try:
+        import markdown as _markdown
+
+        return _markdown.markdown(
+            escaped, extensions=["extra", "sane_lists", "nl2br"]
+        )
+    except Exception:
+        return "<p>" + escaped.replace("\n", "<br>") + "</p>"
+
+
+def build_transcript_html() -> str:
+    """Bangun transkrip HTML mandiri (tanpa aset eksternal) untuk diunduh."""
     now = datetime.now().strftime("%d-%m-%Y %H:%M")
-    lines = [
-        "# Transkrip Diskusi Kewirausahaan — TEDIWIRA",
-        f"Diekspor: {now}",
-        "",
-        "## Lampiran",
-    ]
-
     proposal = st.session_state.proposal_file
-    if proposal:
-        lines += [
-            f"- Nama file: {proposal['name']}",
-            f"- Ukuran: {human_size(len(proposal['bytes']))}",
-            f"- Jumlah halaman: {st.session_state.proposal_pages or '-'}",
-            f"- Karakter teks: {st.session_state.proposal_chars or '-'}",
-            "",
-        ]
-    else:
-        lines += ["- (tidak ada proposal yang diunggah)", ""]
+    history = st.session_state.chat_history
 
-    if st.session_state.proposal_analysis:
-        lines += [
-            "## Hasil Analisis Proposal Bisnis",
-            "",
-            st.session_state.proposal_analysis,
-            "",
-        ]
-
-    lines += ["## Percakapan", ""]
-    if st.session_state.chat_history:
-        for message in st.session_state.chat_history:
-            speaker = "Anda" if message["role"] == "user" else "Mentor (TEDIWIRA)"
-            lines += [f"### {speaker}", "", message["content"], ""]
-            if message.get("sources"):
-                lines.append("Sumber:")
-                for source in message["sources"]:
-                    page = f" (hal. {source['page']})" if source.get("page") else ""
-                    lines.append(f"- {source['file']}{page}")
-                lines.append("")
-    else:
-        lines += ["(belum ada percakapan)", ""]
-
-    lines += [
-        "---",
-        "Disklaimer: jawaban dihasilkan oleh AI. Verifikasi informasi penting "
-        "dengan sumber terpercaya sebelum mengambil keputusan bisnis.",
+    chips = [
+        ("Lampiran", html.escape(proposal["name"]) if proposal else "Tidak ada"),
+        ("Ukuran", human_size(len(proposal["bytes"])) if proposal else "-"),
+        ("Halaman", str(st.session_state.proposal_pages or "-")),
+        ("Jumlah pesan", str(len(history))),
     ]
-    return "\n".join(lines)
+    chips_html = "".join(
+        f'<div class="chip"><span>{label}</span><strong>{value}</strong></div>'
+        for label, value in chips
+    )
+
+    analysis_html = ""
+    if st.session_state.proposal_analysis:
+        analysis_html = (
+            '<section class="card"><h2>🔍 Analisis Proposal Bisnis</h2>'
+            f'<div class="md">{_md_to_html(st.session_state.proposal_analysis)}</div>'
+            "</section>"
+        )
+
+    messages_html = []
+    for message in history:
+        is_user = message.get("role") == "user"
+        label = "Anda" if is_user else "Mentor (TEDIWIRA)"
+        cls = "user" if is_user else "mentor"
+        sources_html = ""
+        sources = message.get("sources") or []
+        if sources:
+            items = "".join(
+                "<li><strong>{}</strong>{}<br><span>{}</span></li>".format(
+                    html.escape(str(source.get("file", "?"))),
+                    f" · hal. {source['page']}" if source.get("page") else "",
+                    html.escape(str(source.get("snippet", ""))),
+                )
+                for source in sources
+            )
+            sources_html = (
+                f'<details open class="sources"><summary>📚 Sumber ({len(sources)})</summary>'
+                f"<ul>{items}</ul></details>"
+            )
+        messages_html.append(
+            f'<article class="msg {cls}"><div class="who">{label}</div>'
+            f'<div class="bubble md">{_md_to_html(message.get("content", ""))}</div>'
+            f"{sources_html}</article>"
+        )
+    if not messages_html:
+        messages_html.append('<p class="empty">Belum ada percakapan.</p>')
+
+    return f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transkrip Diskusi Kewirausahaan — TEDIWIRA</title>
+<style>
+{TRANSCRIPT_CSS}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <div class="top"><span>📓 TEDIWIRA</span><span>{now}</span></div>
+    <h1>Transkrip Diskusi Kewirausahaan</h1>
+    <p>Teman Diskusi Kewirausahaan · diekspor otomatis dari aplikasi</p>
+  </header>
+  <section class="chips">{chips_html}</section>
+  {analysis_html}
+  <section class="chat">
+    <h2>💬 Percakapan</h2>
+    {"".join(messages_html)}
+  </section>
+  <footer>
+    <strong>Disklaimer:</strong> Jawaban dihasilkan oleh AI dan dapat tidak akurat.
+    Verifikasi informasi penting dengan sumber terpercaya sebelum mengambil keputusan bisnis.
+  </footer>
+</main>
+</body>
+</html>"""
 
 
 def build_transcript_json() -> str:
@@ -693,10 +815,10 @@ with chat_left:
 with chat_right:
     st.write("")
     st.download_button(
-        "⬇️ Unduh chat (.md)",
-        data=build_transcript_markdown(),
-        file_name=f"transkrip_tediwira_{datetime.now():%Y%m%d_%H%M}.md",
-        mime="text/markdown",
+        "⬇️ Unduh chat (.html)",
+        data=build_transcript_html(),
+        file_name=f"transkrip_tediwira_{datetime.now():%Y%m%d_%H%M}.html",
+        mime="text/html",
         use_container_width=True,
         disabled=not transcript_available(),
     )
